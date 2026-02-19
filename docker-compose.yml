@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  # 1. Die Datenbank
+  postgres:
+    build: ./db
+    container_name: postgres_db
+    environment:
+      POSTGRES_USER: football_user
+      POSTGRES_PASSWORD: football_pass
+      POSTGRES_DB: baba
+    ports:
+      - "5432:5432"
+
+  # 2. Das Backend (FastAPI)
+  backend:
+    build: ./app
+    container_name: football_api
+    environment:
+      DATABASE_URL: postgresql://football_user:football_pass@postgres:5432/baba
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+
+  # 3. Das Frontend (Webseite)
+  frontend:
+    build: ./frontend
+    container_name: football_web
+    ports:
+      - "8080:80"  # Deine Webseite ist jetzt unter localhost:8080 erreichbar
+    depends_on:
+      - backend

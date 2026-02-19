@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Football Manager 2026</title>
+    <style>
+        /* Grundlegendes Styling der Seite */
+        body { font-family: 'Segoe UI', sans-serif; margin: 40px; background-color: #f4f7f6; color: #333; }
+        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        h2 { border-bottom: 2px solid #007bff; padding-bottom: 10px; color: #007bff; }
+        .grid { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 15px; }
+        input, select { padding: 10px; border: 1px solid #ddd; border-radius: 5px; flex: 1; }
+        button { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        .btn-blue { background: #007bff; color: white; }
+        .btn-green { background: #28a745; color: white; }
+        .btn-orange { background: #ff8c00; color: white; padding: 5px 10px; margin-right: 5px; }
+        .btn-red { background: #dc3545; color: white; padding: 5px 10px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: #f8f9fa; }
+    </style>
+</head>
+<body>
+
+    <h1>🏆 Football Manager Dashboard</h1>
+
+    <div class="card">
+        <h2>Neues Team hinzufügen</h2>
+        <div class="grid">
+            <input type="text" id="t_name" placeholder="Team Name">
+            <input type="text" id="t_city" placeholder="Stadt">
+            <input type="number" id="t_year" placeholder="Gründungsjahr">
+            <button class="btn-blue" onclick="addTeam()">Team speichern</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2 id="player_form_title">Spieler hinzufügen</h2>
+        <div class="grid">
+            <select id="team_select"><option value="">-- Team wählen --</option></select>
+            <input type="text" id="p_fn" placeholder="Vorname">
+            <input type="text" id="p_ln" placeholder="Nachname">
+            <select id="p_pos">
+                <option value="GK">Torwart</option>
+                <option value="DF">Abwehr</option>
+                <option value="MF">Mittelfeld</option>
+                <option value="FW">Sturm</option>
+            </select>
+            <button class="btn-green" id="save_btn" onclick="savePlayer()">Spieler speichern</button>
+            <button id="cancel_btn" style="display:none;" onclick="resetPlayerForm()">Abbrechen</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Kader Übersicht</h2>
+        <table id="playerTable">
+            <thead>
+                <tr><th>Name</th><th>Team</th><th>Position</th><th>Aktionen</th></tr>
+            </thead>
+            <tbody></tbody> </table>
+    </div>
+
+    <div class="card">
+        <h2>🔥 Top-Torschützen</h2>
+        <table id="goalsTable">
+            <thead><tr><th>Spieler</th><th>Tore</th></tr></thead>
+            <tbody></tbody> </table>
+    </div>
+
+    <script>
+        const API = 'http://localhost:8000'; // Adresse des Backends
+        let editPlayerId = null; // Variable für den Bearbeitungsmodus
+
+        // Lädt alle Daten beim Öffnen der Seite
+        async function loadAll() {
+            loadTeams();
+            loadPlayers();
+            loadStats();
+        }
+
+        // Teams für das Dropdown-Menü abrufen
+        async function loadTeams() {
+            const res = await fetch(`${API}/teams`);
+            const teams = await res.json();
+            const sel = document.getElementById('team_select');
+            sel.innerHTML = '<option value="">-- Team wählen --</option>';
+            teams.forEach(t => sel.innerHTML += `<option value="${t.id}">${t.name}</option>`);
+        }
+
+        // Team-Daten speichern
+        async function addTeam() {
+            const name = document.getElementById('t_name').value;
+            if(!name) return alert("Name fehlt!");
+            await fetch(`${API}/teams`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name, city: document.getElementById('t_city').value, founded_year: document.getElementById('t_year').value})
+            });
+            document.getElementById('t_name').value = '';
+            loadTeams();
+        }
+
+        // Spielerliste vom Server laden und anzeigen
+        async function loadPlayers() {
+            const res = await fetch(`${API}/players`);
+            const players = await res.json();
+            const body = document.querySelector('#playerTable tbody');
+            body.innerHTML = '';
+            players.forEach(p => {
+                body.innerHTML += `<tr>
+                    <td>${p.first_name} ${p.last_name}</td>
+                    <td>${p.team_name || 'Vereinslos'}</td> 
+                    <td>${p.position}</td>
+                    <td>
+                        <button class="btn-orange" onclick="startEdit(${JSON.stringify(p).replace(/"/g, '&quot;')})">Bearbeiten</button>
+                        <button class="btn-red" onclick="deletePlayer(${p.id})">Löschen</button>
+                    </td>
+                </tr>`;
+            });
+        }
+
+        // Bereitet das Formular für die Bearbeitung eines Spielers vor
+        function startEdit(player) {
+            editPlayerId = player.id;
+            document.getElementById('player_form_title').innerText = "Spieler bearbeiten (ID: " + player.id + ")";
+            document.getElementById('team_select').value = player.team_id;
+            document.getElementById('p_fn').value = player.first_name;
+            document.getElementById('p_ln').value = player.last_name;
+            document.getElementById('p_pos').value = player.position;
+            document.getElementById('save_btn').innerText = "Update speichern";
+            document.getElementById('cancel_btn').style.display = "inline-block";
+        }
+
+        // Setzt das Spieler-Formular zurück
+        function resetPlayerForm() {
+            editPlayerId = null;
+            document.getElementById('player_form_title').innerText = "Spieler hinzufügen";
+            document.getElementById('p_fn').value = '';
+            document.getElementById('p_ln').value = '';
+            document.getElementById('save_btn').innerText = "Spieler speichern";
+            document.getElementById('cancel_btn').style.display = "none";
+        }
+
+        // Speichert Spieler (entweder neu mit POST oder Update mit PUT)
+        async function savePlayer() {
+            const team_id = document.getElementById('team_select').value;
+            if(!team_id) return alert("Team wählen!");
+
+            const data = {
+                team_id: parseInt(team_id),
+                first_name: document.getElementById('p_fn').value,
+                last_name: document.getElementById('p_ln').value,
+                position: document.getElementById('p_pos').value
+            };
+
+            const url = editPlayerId ? `${API}/players/${editPlayerId}` : `${API}/players`;
+            const method = editPlayerId ? 'PUT' : 'POST';
+
+            const res = await fetch(url, {
+                method: method,
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+
+            if (res.ok) {
+                resetPlayerForm();
+                await loadPlayers(); // WICHTIG: Liste neu laden, um Team-Namen anzuzeigen
+            }
+        }
+
+        // Spieler löschen
+        async function deletePlayer(id) {
+            if(confirm("Löschen?")) {
+                await fetch(`${API}/players/${id}`, {method: 'DELETE'});
+                loadPlayers();
+            }
+        }
+
+        // Top-Torschützen vom Server abrufen
+        async function loadStats() {
+            const res = await fetch(`${API}/stats/goals`);
+            const stats = await res.json();
+            const body = document.querySelector('#goalsTable tbody');
+            body.innerHTML = '';
+            stats.forEach(s => {
+                body.innerHTML += `<tr><td>${s.first_name} ${s.last_name}</td><td><strong>${s.goal_count}</strong></td></tr>`;
+            });
+        }
+
+        // Startet das Laden aller Daten
+        loadAll();
+    </script>
+</body>
+</html>
